@@ -1,7 +1,7 @@
 {
-  "name": "@rbxts/radial-progress",
-  "version": "1.0.9",
-  "description": "Radial progress for all your needs.",
+  "name": "@rbxts/fall-service",
+  "version": "1.0.0",
+  "description": "Service for handling characters fall",
   "main": "src/index.d.ts",
   "types": "src/index.d.ts",
   "files": [
@@ -10,21 +10,18 @@
     "./README.md"
   ],
   "repository": {
-    "url": "https://github.com/Insadem/rbxts-radial-progress",
+    "url": "https://github.com/Insadem/fall-service",
     "type": "github"
   },
-  "homepage": "https://devforum.roblox.com/t/circular-radial-progress-bar-rounded/1594512",
+  "homepage": "https://devforum.roblox.com/t/fallservice-handle-fall-damage-easy-and-flexible/1758693",
   "scripts": {
     "build": "rbxtsc",
     "watch": "rbxtsc -w"
   },
   "keywords": [
-    "radial",
-    "progress",
-    "ui",
-    "loading",
-    "load",
-    "bar"
+    "fall",
+    "fall service",
+    "fall damage"
   ],
   "author": "Insadem",
   "license": "Apache 2.0",
@@ -32,5 +29,9 @@
     "@rbxts/compiler-types": "^2.0.4-types.1",
     "@rbxts/types": "^1.0.662",
     "typescript": "^4.9.5"
+  },
+  "dependencies": {
+    "@rbxts/beacon": "^2.1.1",
+    "@rbxts/services": "^1.5.1"
   }
 }
