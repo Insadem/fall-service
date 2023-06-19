@@ -10,10 +10,34 @@ type FallHandler = ModuleScript & {
 
 export class FallGroup implements IFallGroup
 {
-    private Characters: Map<Model, Script> = new Map();
-    private Players: Map<Player, RBXScriptConnection> = new Map();
-    private _Options: Required<IFallGroupOptions> = undefined!; // Add setter, on options change apply them to all characters in this fall group 
+    private Characters: Map<Model, RBXScriptConnection> = new Map();
+    private Players: Map<Player, RBXScriptConnection[]> = new Map();
 
+    /**
+     * @hidden
+     */
+    public RemoveFromGroup(characterOrPlayer: Player | Model)
+    {
+        if (characterOrPlayer.IsA("Player")) 
+        {
+            const connections = this.Players.get(characterOrPlayer);
+            if (!connections) return;
+
+            for (const connection of connections)
+                connection.Disconnect();
+
+            this.Players.delete(characterOrPlayer);
+        } else
+        {
+            const connection = this.Characters.get(characterOrPlayer);
+            if (!connection) return;
+
+            connection.Disconnect();
+            this.Characters.delete(characterOrPlayer);
+        }
+    }
+
+    private _Options: Required<IFallGroupOptions> = undefined!; // Add setter, on options change apply them to all characters in this fall group 
     private set Options(options: Required<IFallGroupOptions>)
     {
         this._Options = options;
@@ -30,7 +54,10 @@ export class FallGroup implements IFallGroup
                 const fallHandlerModule = actor.FindFirstChild(scriptName)?.FindFirstChild("FallHandler") as FallHandler | undefined;
                 if (!fallHandlerModule) continue;
 
-                fallHandlerModule.SetAttribute("Options", HttpService.JSONEncode(this.Options));
+                const options = (fallHandlerModule.FindFirstChild("Options") as StringValue | undefined);
+                if (!options) continue;
+
+                options.Value = HttpService.JSONEncode(this.Options);
             }
         }
         //#endregion
@@ -54,6 +81,7 @@ export class FallGroup implements IFallGroup
     Enable(character: Model)
     {
         if (this.Characters.has(character)) return;
+        FallService.RemoveFromOtherGroup(character);
 
         const actor = new Instance("Actor");
         actor.Name = "FallServiceActor";
@@ -69,7 +97,11 @@ export class FallGroup implements IFallGroup
         const clientScript = fallHandlerModule.client;
         clientScript.Parent = undefined;
 
-        fallHandlerModule.SetAttribute("Options", HttpService.JSONEncode(this.Options));
+        const options = new Instance("StringValue");
+        options.Name = "Options";
+        options.Value = options.Value = HttpService.JSONEncode(this.Options);
+        options.Parent = fallHandlerModule;
+
         if (FallService.Mode == FallServiceMode.Server || FallService.Mode == FallServiceMode.Double)
         {
             const fallEvent = new Instance("BindableEvent");
@@ -98,29 +130,58 @@ export class FallGroup implements IFallGroup
             clientScript.Parent = actor;
         }
 
-        // Connect to bind event inside script, and fire OnCharacterFall + OnPlayerFall (if player bind declared).
+        const connection = character.AncestryChanged.Connect((_, parent) =>
+        {
+            if (parent) return;
+
+            connection.Disconnect();
+            this.Characters.delete(character);
+        });
+        this.Characters.set(character, connection);
     }
 
     Disable(character: Model)
     {
-        let fallHandlerScript = this.Characters.get(character);
-        fallHandlerScript?.Destroy(); // Remove script from character
+        const connection = this.Characters.get(character);
+        if (!connection) return;
+
+        connection.Disconnect();
+        this.Characters.delete(character);
+
+        character.FindFirstChild("FallServiceActor")?.Destroy(); // Remove script from character
     }
 
-    BindPlayer(player: Player, isInstantImpact: boolean)
+    BindPlayer(player: Player, isInstantImpact: boolean = true)
     {
         if (this.Players.has(player)) return;
+        FallService.RemoveFromOtherGroup(player);
 
-        this.Players.set(player, player.CharacterAdded.Connect(this.Enable));
+        const characterAddedConnection = player.CharacterAdded.Connect((character) =>
+        {
+            this.Enable(character)
+        });
+
+        const playerRemovedConnection = player.AncestryChanged.Connect((_, parent) =>
+        {
+            if (parent) return;
+            this.Players.delete(player);
+        });
+
+        this.Players.set(player, [characterAddedConnection, playerRemovedConnection]);
         if (isInstantImpact)
             if (player.Character) this.Enable(player.Character);
     }
 
-    UnbindPlayer(player: Player, isInstantImpact: boolean)
+    UnbindPlayer(player: Player, isInstantImpact: boolean = true)
     {
         if (!this.Players.has(player)) return;
 
-        this.Players.get(player)!.Disconnect();
+        const connections = this.Players.get(player);
+        if (!connections) return;
+
+        for (const connection of connections)
+            connection.Disconnect();
+
         this.Players.delete(player);
 
         if (isInstantImpact)
